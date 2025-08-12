@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <title>Flask App</title>
+</head>
+<body>
+    <h1>Welcome to the Flask Application!</h1>
+    <p>Make sure your template folder is configured correctly.</p>
+</body>
+</html>
+
+<!-- <!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Image Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+
+        .left,
+        .right {
+            width: 50%;
+            overflow: auto;
+            padding: 1rem;
+        }
+
+        .left img {
+            max-width: 100%;
+            margin-bottom: 10px;
+            cursor: crosshair;
+        }
+
+        #selected-img {
+            max-width: 100%;
+            display: block;
+            margin-bottom: 1rem;
+        }
+
+        textarea {
+            width: 100%;
+            height: 80px;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+        }
+
+        button {
+            padding: 0.5rem 1rem;
+            margin-bottom: 1rem;
+        }
+
+        #response {
+            white-space: pre-wrap;
+            background: #f0f0f0;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+
+        canvas {
+            position: absolute;
+        }
+    </style>
+
+    <!-- Marked.js for Markdown parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- MathJax for LaTeX rendering -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- إعداد MathJax لدعم $...$ -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+            }
+        };
+    </script>
+
+    <!-- مكتبة MathJax نفسها -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+
+</head>
+
+<body>
+
+    <div class="left">
+        <div id="viewer" style="position: relative;"></div>
+    </div>
+
+    <div class="right">
+        <img id="selected-img" src="#" alt="Selected Area" />
+        <textarea id="prompt" placeholder="اشرح الاتي:">اشرح الاتي:</textarea>
+        <button onclick="sendToGPT()">Send</button>
+        <div id="response"></div>
+    </div>
+
+    <script>
+        const images =  image_files  [tojson] ;
+        const viewer = document.getElementById('viewer');
+        const selectedImg = document.getElementById('selected-img');
+        let startX, startY, endX, endY, canvas, ctx, imgElement;
+        let scaleX, scaleY;
+
+        images.forEach(img => {
+            const image = document.createElement("img");
+            image.src = "/static/images/" + img;
+            image.alt = img;
+            image.onload = () => {
+                image.onclick = (e) => prepareCrop(image, e);
+            };
+            viewer.appendChild(image);
+        });
+
+        function prepareCrop(img, event) {
+            if (canvas) canvas.remove();
+
+            const rect = img.getBoundingClientRect();
+            scaleX = img.naturalWidth / rect.width;
+            scaleY = img.naturalHeight / rect.height;
+
+            canvas = document.createElement("canvas");
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            canvas.style.left = img.offsetLeft + "px";
+            canvas.style.top = img.offsetTop + "px";
+            canvas.style.position = "absolute";
+            canvas.style.zIndex = 100;
+            ctx = canvas.getContext("2d");
+            imgElement = img;
+            viewer.appendChild(canvas);
+
+            canvas.onmousedown = (e) => {
+                const r = canvas.getBoundingClientRect();
+                startX = e.clientX - r.left;
+                startY = e.clientY - r.top;
+
+                canvas.onmousemove = (e) => {
+                    const r = canvas.getBoundingClientRect();
+                    endX = e.clientX - r.left;
+                    endY = e.clientY - r.top;
+                    drawSelection();
+                };
+
+                canvas.onmouseup = () => {
+                    canvas.onmousemove = null;
+                    cropImage();
+                };
+            };
+        }
+
+        function drawSelection() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(startX, startY, endX - startX, endY - startY);
+        }
+
+        function cropImage() {
+            const cropCanvas = document.createElement("canvas");
+            const cropCtx = cropCanvas.getContext("2d");
+
+            const sx = startX * scaleX;
+            const sy = startY * scaleY;
+            const sw = (endX - startX) * scaleX;
+            const sh = (endY - startY) * scaleY;
+
+            cropCanvas.width = sw;
+            cropCanvas.height = sh;
+            cropCtx.drawImage(imgElement, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            const dataUrl = cropCanvas.toDataURL();
+            selectedImg.src = dataUrl;
+            selectedImg.dataset.cropped = dataUrl;
+
+            canvas.remove();
+        }
+
+        async function sendToGPT() {
+            const prompt = document.getElementById('prompt').value;
+            const imageData = selectedImg.dataset.cropped;
+
+            const responseDiv = document.getElementById('response');
+            responseDiv.innerText = '';
+            let fullResponse = '';
+
+            try {
+                const res = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData, prompt })
+                });
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let done = false;
+
+                while (!done) {
+                    const { value, done: streamDone } = await reader.read();
+                    done = streamDone;
+                    if (value) {
+                        const chunk = decoder.decode(value);
+                        fullResponse += chunk;
+
+                        // Show raw text while streaming
+                        responseDiv.innerText += chunk;
+                        responseDiv.scrollTop = responseDiv.scrollHeight;
+                    }
+                }
+
+                // After streaming ends
+                finalRender(fullResponse);
+
+            } catch (error) {
+                console.error('Error:', error);
+                responseDiv.innerText = 'حدث خطأ أثناء معالجة طلبك';
+            }
+        }
+
+        function finalRender(text) {
+            const responseDiv = document.getElementById('response');
+
+            // Parse full text into HTML using marked.js
+            const html = marked.parse(text);
+
+            // Set the parsed HTML
+            responseDiv.innerHTML = html;
+
+            // Now re-typeset with MathJax
+            MathJax.typesetPromise([responseDiv]);
+        }
+    </script>
+
+</body>
+
+</html> -->
